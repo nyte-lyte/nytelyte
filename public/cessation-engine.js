@@ -1,4 +1,4 @@
-const _selfScript = document.currentScript;
+const _selfScript = (document.currentScript && document.currentScript.getAttribute('t') !== null) ? document.currentScript : null;
 (function(){
 const _style = document.createElement('style');
 _style.textContent = 'html,body{background:#000}' + `body{margin:0;padding:0;height:100vh;width:100vw;display:flex;justify-content:center;align-items:center;}#canvas-container{box-sizing:border-box;width:min(100vw, 100vh);height:min(100vw, 100vh);display:flex;justify-content:center;align-items:center;border:clamp(8px, 8vmin, 80px) solid black;background-color:black;}#canvas{display:block;aspect-ratio:3 / 2;max-width:100%;max-height:100%;}#canvas-container{position:relative;}`;
