@@ -79,5 +79,6 @@ a {
     width: calc((100vh - 200px) * 1.5);
     max-width: 100%;
     aspect-ratio: unset;
+    justify-self: start;
   }
 }
