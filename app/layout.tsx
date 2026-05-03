@@ -1,15 +1,10 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "nytelyte",
   description: "Artist working in collage, photography, and mixed media.",
-};
-
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
 };
 
 export default function RootLayout({
