@@ -50,35 +50,3 @@ a {
   color: var(--fg);
 }
 
-.home-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-}
-
-.home-piece {
-  aspect-ratio: 3 / 2;
-  width: 100%;
-  border-radius: 2px;
-  overflow: hidden;
-  background: #000;
-  order: -1;
-}
-
-@media (min-width: 769px) {
-  .home-grid {
-    display: grid;
-    grid-template-columns: 1fr 20fr;
-    gap: 60px;
-    align-items: start;
-  }
-
-  .home-piece {
-    order: 0;
-    height: calc(100vh - 200px);
-    width: calc((100vh - 200px) * 1.5);
-    max-width: 100%;
-    aspect-ratio: unset;
-    justify-self: start;
-  }
-}
