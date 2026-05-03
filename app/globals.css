@@ -75,8 +75,9 @@ a {
 
   .home-piece {
     order: 0;
-    width: 100%;
-    aspect-ratio: 3 / 2;
-    max-height: calc(100vh - 160px);
+    height: calc(100vh - 200px);
+    width: calc((100vh - 200px) * 1.5);
+    max-width: 100%;
+    aspect-ratio: unset;
   }
 }
