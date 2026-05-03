@@ -56,14 +56,12 @@ export default function Home() {
         </Link>
       </div>
 
-      {/* Piece — fixed 3:2 size, pushed to right */}
+      {/* Piece — exact 3:2, pushed to right */}
       <div style={{
         marginLeft: "auto",
         flexShrink: 0,
-        height: "calc(100vh - 180px)",
-        width: "calc((100vh - 180px) * 1.5)",
-        maxHeight: "700px",
-        maxWidth: "calc(100vw - 300px)",
+        height: "min(65vh, calc((100vw - 300px) * 2 / 3))",
+        width: "min(calc(65vh * 1.5), calc(100vw - 300px))",
         borderRadius: "2px",
         overflow: "hidden",
         background: "#000",
