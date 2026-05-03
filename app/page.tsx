@@ -16,13 +16,12 @@ export default function Home() {
       flexDirection: "row",
       alignItems: "flex-start",
       gap: "48px",
-      overflow: "hidden",
     }}>
 
-      {/* Text */}
-      <div style={{ width: "200px", flexShrink: 0, paddingTop: "4px" }}>
+      {/* Text — fixed width left column */}
+      <div style={{ width: "180px", flexShrink: 0, paddingTop: "4px" }}>
         <h1 style={{
-          fontSize: "clamp(24px, 2.5vw, 40px)",
+          fontSize: "28px",
           fontWeight: "400",
           lineHeight: "1.1",
           letterSpacing: "-0.02em",
@@ -57,13 +56,14 @@ export default function Home() {
         </Link>
       </div>
 
-      {/* Piece */}
+      {/* Piece — fixed 3:2 size, pushed to right */}
       <div style={{
-        flex: 1,
-        minWidth: 0,
-        aspectRatio: "3 / 2",
-        maxHeight: "calc(100vh - 200px)",
-        alignSelf: "flex-start",
+        marginLeft: "auto",
+        flexShrink: 0,
+        height: "calc(100vh - 180px)",
+        width: "calc((100vh - 180px) * 1.5)",
+        maxHeight: "700px",
+        maxWidth: "calc(100vw - 300px)",
         borderRadius: "2px",
         overflow: "hidden",
         background: "#000",
