@@ -43,7 +43,7 @@ export default function Home() {
         </p>
 
         <Link
-          href="https://cessation-tracker.vercel.app"
+          href="https://cessation-tracker.vercel.app/piece/0"
           target="_blank"
           rel="noopener noreferrer"
           style={{
