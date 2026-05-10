@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    /* Override engine's square constraint — fill the full 3:2 iframe */
+    #canvas-container {
+      width: 100vw !important;
+      height: 100vh !important;
+    }
+  </style>
 </head>
 <body>
   <script src="/cessation-engine.js"></script>
