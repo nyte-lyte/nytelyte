@@ -13,32 +13,26 @@ export default function Home() {
   return (
     <>
       <style>{`
-        .home-grid {
-          display: grid;
-          grid-template-columns: 1fr 20fr;
-          gap: 60px;
-          align-items: center;
-          min-height: calc(100vh - 120px);
-        }
         @media (max-width: 768px) {
-          .home-grid {
-            grid-template-columns: 1fr;
-            gap: 32px;
-            min-height: unset;
-          }
-          .home-piece {
-            width: 100%;
-            order: -1;
-          }
+          .home-grid { grid-template-columns: 1fr !important; }
+          .home-piece { order: -1; }
         }
       `}</style>
 
-      <div className="home-grid">
-        {/* Left: text */}
+      <div
+        className="home-grid"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 3fr",
+          gap: "60px",
+          alignItems: "center",
+          minHeight: "calc(100vh - 120px)",
+        }}
+      >
         <div>
           <h1
             style={{
-              fontSize: "clamp(40px, 7vw, 80px)",
+              fontSize: "clamp(24px, 5vw, 64px)",
               fontWeight: "400",
               lineHeight: "1",
               letterSpacing: "-0.02em",
@@ -82,21 +76,20 @@ export default function Home() {
           </Link>
         </div>
 
-        {/* Right: live piece */}
-        <div
-          className="home-piece"
-          style={{
-            aspectRatio: "3 / 2",
-            width: "100%",
-            borderRadius: "2px",
-            overflow: "hidden",
-            background: "#000",
-          }}
-        >
+        <div className="home-piece" style={{ position: "relative" }}>
+          <div style={{ paddingBottom: "66.667%" }} />
           <iframe
             src={pieceSrc || undefined}
-            style={{ width: "100%", height: "100%", border: "none", display: "block" }}
             title="Cessation"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              border: "none",
+              display: "block",
+            }}
           />
         </div>
       </div>
