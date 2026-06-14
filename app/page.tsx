@@ -3,46 +3,24 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 
-// Real on-chain hashTail + inscriptionUnix per piece (synced from
-// cessation-tracker/src/data/inscriptions.ts) — so the random preview
-// renders each piece as it actually appears on-chain.
-const PIECE_CHAIN: { ht: number; unix: number }[] = [
-  { ht: 51, unix: 1780851771 }, // piece 00
-  { ht: 29, unix: 1780853110 }, // piece 01
-  { ht: 60, unix: 1780854786 }, // piece 02
-  { ht: 21, unix: 1780864812 }, // piece 03
-  { ht: 81, unix: 1780865859 }, // piece 04
-  { ht: 76, unix: 1780866591 }, // piece 05
-  { ht: 42, unix: 1780868047 }, // piece 06
-  { ht: 57, unix: 1780870406 }, // piece 07
-  { ht: 58, unix: 1780873095 }, // piece 08
-  { ht: 22, unix: 1780873497 }, // piece 09
-  { ht: 74, unix: 1780875295 }, // piece 10
-  { ht: 59, unix: 1780878813 }, // piece 11
-  { ht: 73, unix: 1780880962 }, // piece 12
-  { ht: 58, unix: 1780883403 }, // piece 13
-  { ht: 15, unix: 1780885373 }, // piece 14
-  { ht: 42, unix: 1780886934 }, // piece 15
-  { ht: 49, unix: 1780888133 }, // piece 16
-  { ht: 82, unix: 1780892165 }, // piece 17
-  { ht: 58, unix: 1780893567 }, // piece 18
-  { ht: 34, unix: 1780894802 }, // piece 19
-  { ht: 4, unix: 1780895440 }, // piece 20
-  { ht: 66, unix: 1780898132 }, // piece 21
-  { ht: 16, unix: 1780899111 }, // piece 22
-  { ht: 9, unix: 1780899973 }, // piece 23
-  { ht: 66, unix: 1780901092 }, // piece 24
-  { ht: 79, unix: 1780902895 }, // piece 25
-  { ht: 5, unix: 1780903858 }, // piece 26
-  { ht: 67, unix: 1780907945 }, // piece 27
-  { ht: 60, unix: 1780910280 }, // piece 28
+// Hand-picked pieces for the homepage rotation, with their real on-chain
+// hashTail + inscriptionUnix (synced from cessation-tracker/src/data/inscriptions.ts)
+// — so the preview renders each piece as it actually appears on-chain.
+const FEATURED_PIECES: { idx: number; ht: number; unix: number }[] = [
+  { idx: 0, ht: 51, unix: 1780851771 },
+  { idx: 6, ht: 42, unix: 1780868047 },
+  { idx: 10, ht: 74, unix: 1780875295 },
+  { idx: 17, ht: 82, unix: 1780892165 },
+  { idx: 18, ht: 58, unix: 1780893567 },
+  { idx: 22, ht: 16, unix: 1780899111 },
+  { idx: 24, ht: 66, unix: 1780901092 },
+  { idx: 27, ht: 67, unix: 1780907945 },
 ];
 
 export default function Home() {
   const [pieceSrc, setPieceSrc] = useState("");
   useEffect(() => {
-    const idx = Math.floor(Math.random() * 29);
-    const { ht, unix } = PIECE_CHAIN[idx];
+    const { idx, ht, unix } = FEATURED_PIECES[Math.floor(Math.random() * FEATURED_PIECES.length)];
     setPieceSrc(`/piece0.html?v=${idx}#idx=${idx}&ht=${ht}&unix=${unix}`);
   }, []);
 
