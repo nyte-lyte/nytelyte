@@ -83,7 +83,7 @@ export default function Contact() {
         </a>
 
         <a
-          href="https://discord.gg/Yysc4wAf"
+          href="https://discord.gg/bprAnp3CYW"
           target="_blank"
           rel="noopener noreferrer"
           style={{ display: "flex", alignItems: "center", gap: "12px", color: "var(--muted)", fontSize: "13px" }}

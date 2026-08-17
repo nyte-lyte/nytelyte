@@ -66,10 +66,10 @@ export default function Home() {
             }}
           >
             A generative art collection inscribed on the Bitcoin blockchain.
-            Each piece is derived from a custom health index that will span the
-            artist's lifetime. The collection will continue to grow as long as
-            the artist is living, with each new piece starting its journey as
-            an archive of the body's current state.
+            Each piece is a living digital painting that will evolve over
+            multiple lifespans. The collection will continue to grow as long as
+            the artist is alive, with each new piece starting its journey as an
+            archive of the body&apos;s current state.
           </p>
 
           <Link

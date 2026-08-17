@@ -33,7 +33,7 @@ export default function Info() {
         </a>
 
         <a
-          href="https://discord.gg/Yysc4wAf"
+          href="https://discord.gg/bprAnp3CYW"
           target="_blank"
           rel="noopener noreferrer"
           aria-label="Discord"
