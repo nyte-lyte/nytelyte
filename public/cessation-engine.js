@@ -1,7 +1,7 @@
-const _selfScript = (document.currentScript && document.currentScript.getAttribute('t') !== null) ? document.currentScript : null;
+const _selfScript = document.currentScript;
 (function(){
 const _style = document.createElement('style');
-_style.textContent = 'html,body{background:#000}' + `body{margin:0;padding:0;height:100vh;width:100vw;display:flex;justify-content:center;align-items:center;}#canvas-container{box-sizing:border-box;width:min(100vw, 100vh);height:min(100vw, 100vh);display:flex;justify-content:center;align-items:center;border:clamp(8px, 8vmin, 80px) solid black;background-color:black;}#canvas{display:block;aspect-ratio:3 / 2;max-width:100%;max-height:100%;}#canvas-container{position:relative;}`;
+_style.textContent = 'html,body{background:#000}' + `body{margin:0;padding:0;height:100vh;width:100vw;display:flex;justify-content:center;align-items:center;}#canvas-container{box-sizing:border-box;width:min(100vw, 100vh);height:min(100vw, 100vh);display:flex;justify-content:center;align-items:center;border:clamp(8px, 8vmin, 80px) solid black;background-color:black;}#canvas{display:block;aspect-ratio:3 / 2;max-width:100%;max-height:100%;}#canvas-container{position:relative;}#canvas-container:fullscreen{width:100vw;height:100vh;border:clamp(12px, 3vmin, 36px) solid black;}`;
 (document.head || document.documentElement).appendChild(_style);
 const _cc = document.createElement('div');
 _cc.id = 'canvas-container';
@@ -9,13 +9,6 @@ const _cv = document.createElement('canvas');
 _cv.id = 'canvas';
 _cc.appendChild(_cv);
 document.body.appendChild(_cc);
-document.addEventListener('keydown', function(e) {
-  if (e.key.toUpperCase() === 'F') {
-    var c = document.getElementById('canvas-container');
-    if (!document.fullscreenElement) c.requestFullscreen();
-    else document.exitFullscreen();
-  }
-});
 const _vertSrc = `#version 300 es
 in vec2 a_position;
 out vec2 v_uv;
@@ -461,7 +454,27 @@ function normalize(val, min, max) {
   return (val - min) / (max - min);
 }
 
-function blendDatasets(a, b) {
+const ECG_KEYS = ['ventRate', 'prInterval', 'qrsInterval', 'qtInterval', 'qtcInterval', 'pAxis', 'rAxis', 'tAxis'];
+const LAB_KEYS = ['glucose', 'nitrogen', 'creatinine', 'eGFR', 'sodium', 'potassium', 'chloride', 'carbonDioxide', 'calcium'];
+
+function computeMinMaxValues(allDatasets) {
+  const result = {};
+  for (const k of ECG_KEYS) result[k] = { min: Infinity, max: -Infinity };
+  for (const k of LAB_KEYS) result[k] = { min: Infinity, max: -Infinity };
+  for (const d of allDatasets) {
+    for (const k of ECG_KEYS) {
+      result[k].min = Math.min(result[k].min, d.ecg[k]);
+      result[k].max = Math.max(result[k].max, d.ecg[k]);
+    }
+    for (const k of LAB_KEYS) {
+      result[k].min = Math.min(result[k].min, d.labs[k]);
+      result[k].max = Math.max(result[k].max, d.labs[k]);
+    }
+  }
+  return result;
+}
+
+function blendDatasets(a, b, minMaxValues) {
   const blend = (x, y) => x * 0.70 + y * 0.30;
   const blended = {
     date: `blended`,
@@ -486,8 +499,8 @@ function blendDatasets(a, b) {
       carbonDioxide: blend(a.labs.carbonDioxide, b.labs.carbonDioxide),
       calcium:       blend(a.labs.calcium,       b.labs.calcium),
     },
-    healthIndex: blend(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5),
   };
+  blended.healthIndex = minMaxValues ? calculateHealthIndex(blended, minMaxValues) : blend(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5);
   return blended;
 }
 
@@ -500,7 +513,19 @@ function computeKarma(dataset, minMaxValues) {
   return nQTc * 0.35 + nCreat * 0.25 + (1 - nEGFR) * 0.20 + nGlucose * 0.15 + nVentRate * 0.05;
 }
 
-function getAgedDataset(startIdx, lifeFraction, allDatasets) {
+const KARMA_CLEARANCE_K = 0.05;
+
+function karmaClearanceRate(dataset, minMaxValues) {
+  return KARMA_CLEARANCE_K * normalize(
+    dataset.labs.eGFR, minMaxValues.eGFR.min, minMaxValues.eGFR.max
+  );
+}
+
+function remainingKarma(dataset, uncleared, minMaxValues) {
+  return computeKarma(dataset, minMaxValues) * uncleared;
+}
+
+function getAgedDataset(startIdx, lifeFraction, allDatasets, minMaxValues) {
   const span    = allDatasets.length * 0.20;
   const maxSpan = Math.max(0, allDatasets.length - 1 - startIdx);
   const pos     = startIdx + lifeFraction * Math.min(span, maxSpan);
@@ -511,7 +536,7 @@ function getAgedDataset(startIdx, lifeFraction, allDatasets) {
   const a = allDatasets[lo];
   const b = allDatasets[hi];
   const lerp = (x, y) => x + (y - x) * t;
-  return {
+  const aged = {
     date: 'aged',
     ecg: {
       ventRate:    lerp(a.ecg.ventRate,    b.ecg.ventRate),
@@ -534,17 +559,18 @@ function getAgedDataset(startIdx, lifeFraction, allDatasets) {
       carbonDioxide: lerp(a.labs.carbonDioxide, b.labs.carbonDioxide),
       calcium:       lerp(a.labs.calcium,       b.labs.calcium),
     },
-    healthIndex: lerp(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5),
   };
+  aged.healthIndex = minMaxValues ? calculateHealthIndex(aged, minMaxValues) : lerp(a.healthIndex ?? 0.5, b.healthIndex ?? 0.5);
+  return aged;
 }
 
-function applyCollectionInfluence(dataset, allDatasets, lifeFraction, influence = 0.05) {
+function applyCollectionInfluence(dataset, allDatasets, lifeFraction, minMaxValues, influence = 0.05) {
   const n      = allDatasets.length;
   const pull   = influence * lifeFraction;
   const lerp   = (x, y) => x + (y - x) * pull;
   const avgLab = (key) => allDatasets.reduce((s, d) => s + d.labs[key], 0) / n;
   const avgEcg = (key) => allDatasets.reduce((s, d) => s + d.ecg[key],  0) / n;
-  return {
+  const influenced = {
     date: dataset.date,
     ecg: {
       ventRate:    lerp(dataset.ecg.ventRate,    avgEcg('ventRate')),
@@ -567,8 +593,11 @@ function applyCollectionInfluence(dataset, allDatasets, lifeFraction, influence 
       carbonDioxide: lerp(dataset.labs.carbonDioxide, avgLab('carbonDioxide')),
       calcium:       lerp(dataset.labs.calcium,       avgLab('calcium')),
     },
-    healthIndex: lerp(dataset.healthIndex ?? 0.5, allDatasets.reduce((s, d) => s + (d.healthIndex ?? 0.5), 0) / n),
   };
+  influenced.healthIndex = minMaxValues
+    ? calculateHealthIndex(influenced, minMaxValues)
+    : lerp(dataset.healthIndex ?? 0.5, allDatasets.reduce((s, d) => s + (d.healthIndex ?? 0.5), 0) / n);
+  return influenced;
 }
 
 function computeLiberationThreshold(allDatasets, minMaxValues) {
@@ -576,6 +605,25 @@ function computeLiberationThreshold(allDatasets, minMaxValues) {
     .map(d => computeKarma(d, minMaxValues))
     .sort((a, b) => a - b);
   return sorted[Math.floor(0.25 * sorted.length)];
+}
+
+function calculateHealthIndex(data, minMaxValues) {
+  const nQTc  = normalize(data.ecg.qtcInterval,    minMaxValues.qtcInterval.min,   minMaxValues.qtcInterval.max);
+  const nEGFR = normalize(data.labs.eGFR,          minMaxValues.eGFR.min,          minMaxValues.eGFR.max);
+  const nCr   = normalize(data.labs.creatinine,    minMaxValues.creatinine.min,    minMaxValues.creatinine.max);
+  const nVent = normalize(data.ecg.ventRate,       minMaxValues.ventRate.min,      minMaxValues.ventRate.max);
+  const nK    = normalize(data.labs.potassium,     minMaxValues.potassium.min,     minMaxValues.potassium.max);
+  const nCO2  = normalize(data.labs.carbonDioxide, minMaxValues.carbonDioxide.min, minMaxValues.carbonDioxide.max);
+  const nQRS  = normalize(data.ecg.qrsInterval,    minMaxValues.qrsInterval.min,   minMaxValues.qrsInterval.max);
+  return (
+    (1 - nQTc)  * 0.30 +
+    nEGFR       * 0.25 +
+    (1 - nCr)   * 0.15 +
+    (1 - nVent) * 0.10 +
+    nK          * 0.07 +
+    nCO2        * 0.07 +
+    (1 - nQRS)  * 0.06
+  );
 }
 
 let healthDataSets = [
@@ -1275,6 +1323,30 @@ let healthDataSets = [
       calcium: 9.1,
     },
   },
+  {
+    date: "2026-06-19",
+    ecg: {
+      ventRate: 56,
+      prInterval: 143,
+      qrsInterval: 83,
+      qtInterval: 437,
+      qtcInterval: 428,
+      pAxis: 73,
+      rAxis: 82,
+      tAxis: 68,
+    },
+    labs: {
+      glucose: 89,
+      nitrogen: 13,
+      creatinine: 0.63,
+      eGFR: 111,
+      sodium: 138,
+      potassium: 4.5,
+      chloride: 106,
+      carbonDioxide: 22,
+      calcium: 9.2,
+    },
+  },
 ];
 
 healthDataSets.sort((a, b) => {
@@ -1456,6 +1528,11 @@ function calculateHealthIndex(data) {
 healthDataSets.forEach((dataSet) => {
   dataSet.healthIndex = calculateHealthIndex(dataSet);
 });
+
+function refreshMinMaxValues(allDatasets) {
+  const fresh = computeMinMaxValues(allDatasets);
+  for (const key in fresh) minMaxValues[key] = fresh[key];
+}
 
 const canvas = document.getElementById("canvas");
 const gl = canvas.getContext("webgl2");
@@ -1815,30 +1892,19 @@ async function init() {
   const BAKED_VOID_PROGRESS    = /*BAKE:VOID_PROGRESS*/0.0;
   const YEARS_PER_SECOND = 1 / (365 * 24 * 3600);
 
+  const U_TIME_WRAP = 200 * Math.PI;
+
   let inheritedHueDegOverride = null;
 
   const _sc = (typeof _selfScript !== 'undefined') ? _selfScript : null;
   if (_sc) {
     const _t = _sc.getAttribute('t');
     if (_t !== null) {
-      currentDataSetIndex    = parseInt(_t)                          || currentDataSetIndex;
-      lastTwoHashDigits      = parseInt(_sc.getAttribute('ht'))      || lastTwoHashDigits;
-      inscriptionUnixSeconds = parseInt(_sc.getAttribute('unix'))    || inscriptionUnixSeconds;
+      currentDataSetIndex    = parseInt(_t);
+      lastTwoHashDigits      = parseInt(_sc.getAttribute('ht'));
+      inscriptionUnixSeconds = parseInt(_sc.getAttribute('unix'));
       const _hue = _sc.getAttribute('hue');
       if (_hue !== null) inheritedHueDegOverride = parseFloat(_hue);
-    }
-  } else {
-
-    const _hp = {};
-    window.location.hash.slice(1).split('&').forEach(p => {
-      const eq = p.indexOf('=');
-      if (eq > 0) _hp[p.slice(0, eq)] = p.slice(eq + 1);
-    });
-    if (_hp.idx) {
-      currentDataSetIndex    = parseInt(_hp.idx);
-      lastTwoHashDigits      = parseInt(_hp.ht)   || lastTwoHashDigits;
-      inscriptionUnixSeconds = parseInt(_hp.unix) || inscriptionUnixSeconds;
-      if (_hp.hue != null) inheritedHueDegOverride = parseFloat(_hp.hue);
     }
   }
 
@@ -1862,6 +1928,7 @@ async function init() {
   let __reanimationOverride = null;
 
   const BLOCKS_PER_YEAR = 52596;
+  const SIBLING_FETCH_BATCH = 8;
   const BLOCK_WINDOW_MS = 600000;
 
   const lc = {
@@ -1877,8 +1944,17 @@ async function init() {
     isLiberated:          false,
     voidProgress:         0.0,
     collectionDatasets:   [],
+    uncleared:            1,
+    collectionResolved:   false,
+
     _siblingPollCount:    0,
+    ownDataset:           null,
+    collectionRoot:       null,
   };
+
+  let _releaseOwnData;
+  lc.ownDataReady = new Promise((resolve) => { _releaseOwnData = resolve; });
+  const lcReleaseOwnData = () => { if (_releaseOwnData) { _releaseOwnData(); _releaseOwnData = null; } };
 
   function lcTick(nowMs) {
     if (lc.reanimationTriggerMs !== null) {
@@ -1892,13 +1968,57 @@ async function init() {
   }
 
   function lcCycleDataset() {
-    return lc.cycleDataset ?? healthDataSets[currentDataSetIndex];
+    if (lc.cycleDataset) return lc.cycleDataset;
+    if (lc.ownDataset)   return lc.ownDataset;
+    const fromCollection = lc.collectionDatasets.find(d => d.pieceIndex === currentDataSetIndex);
+    if (fromCollection)  return fromCollection.dataset;
+    return healthDataSets[currentDataSetIndex];
   }
 
+  function _lcMergedEntries() {
+    const byIndex = new Map();
+    if (!lc.collectionResolved) {
+      for (let i = 0; i < healthDataSets.length; i++) {
+        byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
+      }
+    }
+    for (const d of lc.collectionDatasets) {
+      if (typeof d.pieceIndex === 'number' && d.dataset) {
+        byIndex.set(d.pieceIndex, { pieceIndex: d.pieceIndex, dataset: d.dataset });
+      }
+    }
+    if (lc.ownDataset) {
+      byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: lc.ownDataset });
+    }
+
+    if (byIndex.size === 0) {
+      const ownBaked = healthDataSets[currentDataSetIndex];
+      if (ownBaked) {
+        byIndex.set(currentDataSetIndex, { pieceIndex: currentDataSetIndex, dataset: ownBaked });
+      } else {
+        for (let i = 0; i < healthDataSets.length; i++) {
+          byIndex.set(i, { pieceIndex: i, dataset: healthDataSets[i] });
+        }
+      }
+    }
+    return [...byIndex.values()].sort((a, b) => a.pieceIndex - b.pieceIndex);
+  }
   function lcEffectiveCollection() {
-    return lc.collectionDatasets.length > 0
-      ? lc.collectionDatasets.map(d => d.dataset)
-      : healthDataSets;
+    return _lcMergedEntries().map(e => e.dataset);
+  }
+
+  function lcOwnPosition() {
+    return _lcMergedEntries().findIndex(e => e.pieceIndex === currentDataSetIndex);
+  }
+
+  function getDrawCollection() {
+    const base = lcEffectiveCollection();
+    if (!lc.cycleDataset) return base;
+    const pos = lcOwnPosition();
+    if (pos < 0) return base;
+    const arr = [...base];
+    arr[pos] = lc.cycleDataset;
+    return arr;
   }
 
   function lcGetPartnerDataset(partnerIdx) {
@@ -1909,48 +2029,116 @@ async function init() {
   }
 
   const _engineId = _sc ? _sc.getAttribute('src').replace('/content/', '') : null;
+  function _resolveOwnId() {
+    if (typeof window === 'undefined' || !window.location) return null;
+    const m = window.location.pathname.match(/\/(?:content|preview)\/([0-9a-f]{64}i\d+)/i);
+    return m ? m[1] : null;
+  }
+  const _ownId = _resolveOwnId();
+  lc.collectionAncestors = [];
+  lc.collectionRoot = _engineId;
+
+  async function lcResolveAncestors() {
+    if (!_ownId) return [];
+    const ancestors = [];
+    let cursor = _ownId;
+    for (let depth = 0; depth < 10; depth++) {
+      let resp;
+      try { resp = await fetch(`/r/parents/${cursor}/inscriptions/0`).then(r => r.json()); }
+      catch (e) { break; }
+      const parents = resp?.parents ?? resp?.ids ?? [];
+      if (parents.length === 0) break;
+      const parentId = parents[0].id ?? parents[0];
+      if (ancestors.includes(parentId) || parentId === _ownId) break;
+      ancestors.push(parentId);
+      cursor = parentId;
+    }
+    return ancestors;
+  }
 
   async function lcRefreshSiblings() {
-    if (!_engineId) return;
-    let page = 0, more = true;
+    if (!lc.collectionAncestors || lc.collectionAncestors.length === 0) return;
     const fetched = [];
-    while (more) {
-      let resp;
-      try { resp = await fetch(`/r/children/${_engineId}/inscriptions/${page}`).then(r => r.json()); }
-      catch (e) { break; }
-      for (const id of (resp.ids ?? [])) {
-        try {
-          const metaHex = await fetch(`/r/metadata/${id}`).then(r => r.text());
-          if (!metaHex || !metaHex.trim()) continue;
-          const meta = cborDecode(metaHex.trim());
-          if (meta && meta.dataset) {
-            fetched.push({
-              id,
-              pieceIndex:      meta.pieceIndex      ?? null,
-              dataset:         meta.dataset,
-              hashTail:        meta.hashTail         ?? null,
-              inscriptionUnix: meta.inscriptionUnix  ?? null,
-            });
+    for (const ancestor of [...lc.collectionAncestors].reverse()) {
+      let page = 0, more = true;
+      while (more) {
+        let resp;
+        try { resp = await fetch(`/r/children/${ancestor}/inscriptions/${page}`).then(r => r.json()); }
+        catch (e) { break; }
+        const childIds = (resp.children ?? []).map(c => c.id ?? c).concat(resp.ids ?? []);
+
+        for (let i = 0; i < childIds.length; i += SIBLING_FETCH_BATCH) {
+          const batch = childIds.slice(i, i + SIBLING_FETCH_BATCH);
+          const results = await Promise.all(batch.map(id =>
+            fetch(`/r/metadata/${id}`)
+              .then(r => r.json())
+              .then(hex => ({ id, hex }))
+              .catch(() => null)
+          ));
+          for (const res of results) {
+            if (!res) continue;
+            const { id, hex } = res;
+            if (!hex || typeof hex !== 'string' || !hex.trim()) continue;
+            try {
+              const meta = cborDecode(hex.trim());
+              if (meta && meta.dataset) {
+                fetched.push({
+                  id,
+                  pieceIndex:      meta.pieceIndex      ?? null,
+                  dataset:         meta.dataset,
+                  hashTail:        meta.hashTail         ?? null,
+                  inscriptionUnix: meta.inscriptionUnix  ?? null,
+                });
+              }
+            } catch (e) { /* skip — engine inscriptions have no .dataset and end up here */ }
           }
-        } catch (e) { /* skip this sibling */ }
+        }
+        more = resp.more ?? false;
+        page++;
       }
-      more = resp.more ?? false;
-      page++;
     }
-    if (fetched.length > 0) lc.collectionDatasets = fetched;
+    if (fetched.length > 0) {
+      lc.collectionDatasets = fetched;
+
+      lc.collectionResolved = true;
+      refreshMinMaxValues(lcEffectiveCollection());
+      recomputePartnerInheritedHue();
+      console.log(`[lc] collection resolved — ${fetched.length} piece(s) on chain`);
+    }
+  }
+
+  function recomputePartnerInheritedHue() {
+    const p = getPartnerIndex(currentDataSetIndex);
+    if (p < 0) return;
+    if (p < healthDataSets.length) {
+
+      partnerInheritedHueDeg = allInheritedHues[p];
+      return;
+    }
+    const prevIdx = Math.max(0, p - 1);
+    const collection = lcEffectiveCollection();
+    const prevFromCollection = lc.collectionDatasets.find(d => d.pieceIndex === prevIdx);
+    const prevDs = prevFromCollection?.dataset
+      ?? (prevIdx < healthDataSets.length ? healthDataSets[prevIdx] : null);
+    if (prevDs) {
+      partnerInheritedHueDeg = computeHSBFromStats(prevDs, collection).hue * 360;
+    }
   }
 
   async function lcIsPartnerLiberated(pd, pInscriptionHeight) {
     let pCessationBlock = pInscriptionHeight + Math.round(lifespanYearsFromHashDigits(pd.hashTail) * BLOCKS_PER_YEAR);
     let pCycleDs = pd.dataset;
+
+    let pUncleared = 1;
     const myDs = lcCycleDataset();
     const collection = lcEffectiveCollection();
 
     while (true) {
       if (lc.currentBlockHeight < pCessationBlock) return false;
-      const blended   = blendDatasets(pCycleDs, myDs);
+      const blended   = blendDatasets(pCycleDs, myDs, minMaxValues);
       const threshold = computeLiberationThreshold(collection, minMaxValues);
-      const karma     = computeKarma(blended, minMaxValues);
+      pUncleared     *= (1 - karmaClearanceRate(blended, minMaxValues));
+      const karma     = remainingKarma(blended, pUncleared, minMaxValues);
       if (karma < threshold) return true;
 
       pCycleDs = blended;
@@ -1964,7 +2152,20 @@ async function init() {
 
   async function lcCheckVoid() {
     const partnerIdx = getPartnerIndex(currentDataSetIndex);
-    if (partnerIdx < 0) { lc.voidTriggerMs = Date.now(); return; }
+
+    if (partnerIdx < 0) {
+      const pd1 = lc.collectionDatasets.find(d => d.pieceIndex === 1);
+      if (!pd1 || pd1.hashTail == null) return;
+      try {
+        const pInfo = await fetch(`/r/inscription/${pd1.id}`).then(r => r.json());
+        const partnerLiberated = await lcIsPartnerLiberated(pd1, pInfo.height ?? 0);
+        if (partnerLiberated) {
+          lc.voidTriggerMs = Date.now();
+          console.log('[lc] VOID — piece 0 genesis: piece 1 liberated');
+        }
+      } catch (e) { /* piece 1 state unknown — void pending */ }
+      return;
+    }
     const pd = lc.collectionDatasets.find(d => d.pieceIndex === partnerIdx);
     if (!pd || pd.hashTail == null) return;
     try {
@@ -1988,15 +2189,23 @@ async function init() {
         await lcCheckVoid();
         return;
       }
-      const partnerDs  = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
-      const blended    = blendDatasets(lcCycleDataset(), partnerDs);
+
+      const partnerDs = lcGetPartnerDataset(partnerIdx)
+        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      if (!partnerDs) {
+        console.warn(`[lc] partner ${partnerIdx} not yet discoverable — deferring reanimation`);
+        return;
+      }
+      const blended    = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold  = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
-      const karma      = computeKarma(blended, minMaxValues);
+
+      lc.uncleared    *= (1 - karmaClearanceRate(blended, minMaxValues));
+      const karma      = remainingKarma(blended, lc.uncleared, minMaxValues);
 
       if (karma < threshold) {
         lc.isLiberated  = true;
         lc.cycleDataset = blended;
-        console.log(`[lc] LIBERATED — karma ${karma.toFixed(4)} < threshold ${threshold.toFixed(4)}`);
+        console.log(`[lc] LIBERATED — remaining karma ${karma.toFixed(4)} < threshold ${threshold.toFixed(4)} after ${lc.cycleCount} cycle(s)`);
         await lcCheckVoid();
       } else {
         lc.reanimationTriggerMs = Date.now();
@@ -2022,10 +2231,16 @@ async function init() {
     while (lc.currentBlockHeight >= lc.cessationBlock && !lc.isLiberated) {
       const partnerIdx = getPartnerIndex(currentDataSetIndex);
       if (partnerIdx < 0) { lc.isLiberated = true; break; }
-      const partnerDs = lcGetPartnerDataset(partnerIdx) ?? healthDataSets[Math.max(0, partnerIdx)];
-      const blended   = blendDatasets(lcCycleDataset(), partnerDs);
+      const partnerDs = lcGetPartnerDataset(partnerIdx)
+        ?? (partnerIdx >= 0 && partnerIdx < healthDataSets.length ? healthDataSets[partnerIdx] : null);
+      if (!partnerDs) {
+        console.warn(`[lc] fast-forward: partner ${partnerIdx} not discoverable — stopping replay`);
+        break;
+      }
+      const blended   = blendDatasets(lcCycleDataset(), partnerDs, minMaxValues);
       const threshold = computeLiberationThreshold(lcEffectiveCollection(), minMaxValues);
-      const karma     = computeKarma(blended, minMaxValues);
+      lc.uncleared   *= (1 - karmaClearanceRate(blended, minMaxValues));
+      const karma     = remainingKarma(blended, lc.uncleared, minMaxValues);
       if (karma < threshold) { lc.isLiberated = true; lc.cycleDataset = blended; break; }
       lc.cycleCount++;
       lc.cycleDataset = blended;
@@ -2041,14 +2256,46 @@ async function init() {
     try {
 
       const _blk = _sc ? _sc.getAttribute('block') : null;
-      if (_blk) {
+      if (_blk !== null && _blk !== '' && Number.isFinite(parseInt(_blk))) {
         lc.ownBlockHeight = parseInt(_blk);
       } else {
-        const selfInfo = await fetch('/r/inscription/self').then(r => r.json());
-        lc.ownBlockHeight = selfInfo.height ?? 0;
+        const selfPath = _ownId ? `/r/inscription/${_ownId}` : '/r/inscription/self';
+        const selfInfo = await fetch(selfPath).then(r => r.json());
+        if (!Number.isFinite(selfInfo?.height)) {
+          throw new Error(`[lc] no block height from ${selfPath} — cannot start the lifecycle clock`);
+        }
+        lc.ownBlockHeight = selfInfo.height;
       }
       lc.cessationBlock  = lc.ownBlockHeight + Math.round(lifespanYears * BLOCKS_PER_YEAR);
       lc.currentBlockHeight = await fetch('/r/blockheight').then(r => r.json());
+
+      if (_ownId) {
+        lc.collectionAncestors = await lcResolveAncestors();
+        if (lc.collectionAncestors.length > 0) {
+          lc.collectionRoot = lc.collectionAncestors[lc.collectionAncestors.length - 1];
+        }
+
+        try {
+          const ownHex = await fetch(`/r/metadata/${_ownId}`).then(r => r.json());
+          if (ownHex && typeof ownHex === 'string' && ownHex.trim()) {
+            const ownMeta = cborDecode(ownHex.trim());
+            if (ownMeta && ownMeta.dataset) {
+              lc.ownDataset = ownMeta.dataset;
+
+              lc.collectionDatasets = [{
+                id:               _ownId,
+                pieceIndex:       ownMeta.pieceIndex ?? currentDataSetIndex,
+                dataset:          ownMeta.dataset,
+                hashTail:         ownMeta.hashTail ?? null,
+                inscriptionUnix:  ownMeta.inscriptionUnix ?? null,
+              }];
+            }
+          }
+        } catch (e) { /* dev mode or no metadata — baked array carries dev */ }
+      }
+
+      lcReleaseOwnData();
+
       await lcRefreshSiblings();
       await lcFastForward();
       if (lc.isLiberated && lc.voidTriggerMs === null) await lcCheckVoid();
@@ -2056,7 +2303,10 @@ async function init() {
       lc.ready = true;
       console.log(`[lc] ready — block ${lc.currentBlockHeight}, cessation ${lc.cessationBlock}, cycle ${lc.cycleCount}, liberated: ${lc.isLiberated}`);
     } catch (e) {
-      console.warn('[lc] lifecycle engine inactive (not in ord env)');
+      console.warn('[lc] lifecycle engine inactive (not in ord env)', e);
+    } finally {
+
+      lcReleaseOwnData();
     }
   }
 
@@ -2137,8 +2387,8 @@ async function init() {
 
   let lifespanYears = lifespanYearsFromHashDigits(lastTwoHashDigits);
 
-  function setHSBUniforms(ds) {
-    const { hue, sat, bri } = computeHSBFromStats(ds, healthDataSets);
+  function setHSBUniforms(ds, collection) {
+    const { hue, sat, bri } = computeHSBFromStats(ds, collection);
     gl.uniform1f(uGlucoseLoc, hue);
     gl.uniform1f(uPotassiumLoc, sat);
     gl.uniform1f(uEgfrLoc, bri);
@@ -2212,7 +2462,7 @@ async function init() {
     },
     {
       label: 'CO2', labKey: 'carbonDioxide', phaseKey: 'CO2',
-      phaseSeed: () => 0, tickTwoPi: true,
+      phaseSeed: (h) => (h / 99) * 1.1 * Math.PI, tickTwoPi: true,
       tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CO2),
       strengthLoc: uCo2StrengthLoc, hueLoc: uCo2HueDegLoc, radiusLoc: null,
       update({ ph, p, baseHueDeg, co2Pulse }) {
@@ -2225,7 +2475,7 @@ async function init() {
     },
     {
       label: 'Ca', labKey: 'calcium', phaseKey: 'Ca',
-      phaseSeed: () => 0, tickTwoPi: true,
+      phaseSeed: (h) => (h / 99) * 0.7 * Math.PI, tickTwoPi: true,
       tempoFn: (ds) => getBeamTempoSeconds(ds, BEAM.CALCIUM),
       strengthLoc: uCalciumStrengthLoc, hueLoc: uCalciumHueDegLoc, radiusLoc: uCalciumRadiusLoc,
       update({ ph, p, baseHueDeg, caPulse, pCO2, pPR }) {
@@ -2238,6 +2488,24 @@ async function init() {
     },
   ];
 
+  {
+
+    const _initDs  = healthDataSets[currentDataSetIndex]
+                  ?? healthDataSets[healthDataSets.length - 1];
+    const _initSecs = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
+    for (const cfg of beamConfigs) {
+      const seed  = cfg.phaseSeed(lastTwoHashDigits);
+      const tempo = Math.max(1e-3, cfg.tempoFn(_initDs));
+      if (cfg.tickTwoPi) {
+
+        beamPhases[cfg.phaseKey] = seed + (_initSecs * 2 * Math.PI) / tempo;
+      } else {
+
+        beamPhases[cfg.phaseKey] = (seed + _initSecs / tempo) % 1;
+      }
+    }
+  }
+
   function draw() {
     resizeCanvasToDisplaySize(canvas);
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
@@ -2245,7 +2513,9 @@ async function init() {
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     const t = performance.now() / 1000;
-    if (uTimeLoc) gl.uniform1f(uTimeLoc, t);
+
+    const secsSinceBirth = Math.max(0, Date.now() / 1000 - inscriptionUnixSeconds);
+    if (uTimeLoc) gl.uniform1f(uTimeLoc, secsSinceBirth % U_TIME_WRAP);
     window.__lastT = window.__lastT ?? t;
     const dt = Math.min(0.1, Math.max(0, t - window.__lastT));
     window.__lastT = t;
@@ -2272,12 +2542,17 @@ async function init() {
       (params.timeWarp || 1);
 
     const lifeFraction = clamp(totalYears / lifespanYears, 0, 1);
+    const drawCollection = getDrawCollection();
+
+    const ownPos = lcOwnPosition();
+    const startIdx = ownPos >= 0 ? ownPos : Math.min(currentDataSetIndex, drawCollection.length - 1);
     const activeDataSet = applyCollectionInfluence(
-      getAgedDataset(currentDataSetIndex, lifeFraction, healthDataSets),
-      healthDataSets,
-      lifeFraction
+      getAgedDataset(startIdx, lifeFraction, drawCollection, minMaxValues),
+      drawCollection,
+      lifeFraction,
+      minMaxValues
     );
-    setHSBUniforms(activeDataSet);
+    setHSBUniforms(activeDataSet, drawCollection);
 
     gl.uniform1f(uTotalYearsLoc, totalYears);
     gl.uniform1f(uLifespanYearsLoc, lifespanYears);
@@ -2357,12 +2632,12 @@ async function init() {
     if (uIsLiberatedLoc) gl.uniform1f(uIsLiberatedLoc, isLiberated);
     if (uVoidProgressLoc) gl.uniform1f(uVoidProgressLoc, voidProgress);
 
-    const baseHSB = computeHSBFromStats(activeDataSet, healthDataSets);
+    const baseHSB = computeHSBFromStats(activeDataSet, drawCollection);
     let baseHueDeg = baseHSB.hue * 360.0;
 
     co2Pulse *= Math.exp(-dt / 18.0);
     caPulse  *= Math.exp(-dt / 26.0);
-    const pCO2 = winsorizedPercentileForLab(activeDataSet, 'carbonDioxide', healthDataSets);
+    const pCO2 = winsorizedPercentileForLab(activeDataSet, 'carbonDioxide', drawCollection);
     const pPR = clamp(
       (activeDataSet.ecg.prInterval - minMaxValues.prInterval.min) /
       Math.max(1e-6, minMaxValues.prInterval.max - minMaxValues.prInterval.min),
@@ -2382,7 +2657,7 @@ async function init() {
         beamPhases[cfg.phaseKey] = (beamPhases[cfg.phaseKey] + dt / Math.max(1e-3, cfg.tempoFn(activeDataSet))) % 1;
       }
       const ph = beamPhases[cfg.phaseKey];
-      const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, healthDataSets);
+      const p = winsorizedPercentileForLab(activeDataSet, cfg.labKey, drawCollection);
       const { str, hue } = cfg.update({ ph, p, ds: activeDataSet, baseHueDeg, totalYears, co2Pulse, caPulse, pCO2, pPR });
       if (cfg.strengthLoc) gl.uniform1f(cfg.strengthLoc, str);
       if (cfg.hueLoc)      gl.uniform1f(cfg.hueLoc, hue);
@@ -2405,13 +2680,20 @@ async function init() {
   }
 
   gl.clearColor(0, 0, 0, 1);
-  draw();
 
-  initLifecycle().catch(() => {});
+  (async () => {
+    const lifecycle = initLifecycle().catch(() => {});
+    if (currentDataSetIndex >= healthDataSets.length) {
+      await Promise.race([lc.ownDataReady, lifecycle]);
+    }
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    draw();
+  })();
 
 }
 
 function percentile(value, sortedArray) {
+  if (sortedArray.length < 2) return 0.5;
   const rank = sortedArray.filter((v) => v < value).length;
   return rank / (sortedArray.length - 1);
 }

@@ -21,7 +21,10 @@ export default function Home() {
   const [pieceSrc, setPieceSrc] = useState("");
   useEffect(() => {
     const { idx, ht, unix } = FEATURED_PIECES[Math.floor(Math.random() * FEATURED_PIECES.length)];
-    setPieceSrc(`/piece0.html?v=${idx}#idx=${idx}&ht=${ht}&unix=${unix}`);
+    // Query params, not a hash fragment: piece0.html forwards these onto the
+    // engine's <script> tag, which is how inscribed pieces pass them. The hash
+    // path only existed in the engine's dev block and is stripped from the bundle.
+    setPieceSrc(`/piece0.html?t=${idx}&ht=${ht}&unix=${unix}`);
   }, []);
 
   return (

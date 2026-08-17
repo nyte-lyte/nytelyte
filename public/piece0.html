@@ -12,6 +12,30 @@
   </style>
 </head>
 <body>
-  <script src="/cessation-engine.js"></script>
+  <!--
+    Renders a piece through exactly the on-chain code path.
+
+    The engine takes its per-piece params from attributes on its own <script> tag
+    (t / ht / unix / hue) — the same way each inscribed piece passes them. It used
+    to read them from the URL hash instead, but that lives in the dev-only block
+    that build.js strips, so the shipped bundle ignores the hash entirely. Passing
+    them as attributes means this preview runs the identical path as chain.
+
+    document.write is deliberate: it inserts the script during parsing, so
+    document.currentScript resolves to it. A script appended via appendChild
+    executes asynchronously, currentScript is null, and the engine silently falls
+    back to its baked default piece.
+  -->
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var attrs = ['t', 'ht', 'unix', 'hue', 'block'].map(function (k) {
+        var v = q.get(k);
+        if (v === null || v === '') return '';
+        return ' ' + k + '="' + String(v).replace(/[^0-9.\-]/g, '') + '"';
+      }).join('');
+      document.write('<script' + attrs + ' src="/cessation-engine.js"><\/script>');
+    })();
+  </script>
 </body>
 </html>
