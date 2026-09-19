@@ -38,10 +38,6 @@ a {
   color: #999999;
 }
 
-.social-icon:hover {
-  color: var(--fg);
-}
-
 .view-link:hover {
   color: var(--fg);
 }
