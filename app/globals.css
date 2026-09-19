@@ -45,3 +45,18 @@ a {
 .nav-link:hover {
   color: var(--fg);
 }
+
+.site-nav {
+  gap: 32px;
+}
+
+/* Narrow phones: the nav row (brand + 3 links, 32px gap) can run past the
+   viewport with no wrap point. Let it wrap instead of forcing horizontal
+   scroll. Longhand row/column-gap here overrides the shorthand above. */
+@media (max-width: 480px) {
+  .site-nav {
+    flex-wrap: wrap;
+    row-gap: 10px;
+    column-gap: 20px;
+  }
+}

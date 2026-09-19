@@ -23,10 +23,10 @@ export default function RootLayout({
         }}
       >
         <nav
+          className="site-nav"
           style={{
             display: "flex",
             alignItems: "baseline",
-            gap: "32px",
             marginBottom: "80px",
           }}
         >
