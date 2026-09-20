@@ -68,10 +68,10 @@ export default function Home() {
               marginBottom: "32px",
             }}
           >
-            A generative art collection inscribed on the Bitcoin blockchain.
-            Each piece is a living digital painting that will evolve over
-            multiple lifespans. The collection will continue to grow as long as
-            the artist is alive, with each new piece starting its journey as an
+            A generative art collection inscribed on the Bitcoin blockchain. A
+            self-portrait series in which each piece evolves over multiple
+            lifespans. The collection will continue to grow as long as the
+            artist is alive, with each new portrait starting its journey as an
             archive of the body&apos;s current state.
           </p>
 
