@@ -8,7 +8,8 @@ export default function About() {
           lineHeight: "1.7",
         }}
       >
-        Interdisciplinary artist exploring blockchain as medium.
+        Interdisciplinary artist working with blockchain as a medium. Using
+        data generated from my body to create self-portraits.
       </p>
     </div>
   );
