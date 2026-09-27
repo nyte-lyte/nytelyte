@@ -68,10 +68,10 @@ export default function Home() {
               marginBottom: "32px",
             }}
           >
-            A generative art collection inscribed on the Bitcoin blockchain. A
-            self-portrait series in which each piece evolves over multiple
-            lifespans. Each new portrait added to the collection is starting
-            its journey as an archive of the body&apos;s current state.
+            A generative art self-portrait series inscribed on the Bitcoin
+            blockchain, in which each piece evolves over multiple lifespans.
+            Each new portrait starts its journey as an archive of the
+            body&apos;s current state.
           </p>
 
           <Link
